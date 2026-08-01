@@ -14,6 +14,8 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pinball_jax"]
+# Ship the .cfg domain configs alongside the package.
+artifacts = ["*.cfg"]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "numpy"]

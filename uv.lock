@@ -182,6 +182,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "numpy" },
     { name = "pytest" },
 ]
 
@@ -189,7 +190,10 @@ dev = [
 requires-dist = [{ name = "jax" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest" }]
+dev = [
+    { name = "numpy" },
+    { name = "pytest" },
+]
 
 [[package]]
 name = "pluggy"
