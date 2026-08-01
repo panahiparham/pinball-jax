@@ -72,7 +72,7 @@ class Pinball:
         state: PinballState,
         action: jax.Array,
         params: PinballParams | None = None,
-    ) -> tuple[jax.Array, PinballState, jax.Array, jax.Array, dict[str, jax.Array]]:
+    ) -> tuple[jax.Array, PinballState, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]]:
         del key, action
         params = params if params is not None else PinballParams()
 
@@ -83,10 +83,6 @@ class Pinball:
         reward = jnp.asarray(-1.0, dtype=jnp.float32)
         terminated = jnp.asarray(False)
         truncated = timestep >= params.max_steps_in_episode
-        # The protocol carries a single combined "done" signal; terminated
-        # and truncated are surfaced separately via info for callers that
-        # need to distinguish the two.
-        done = jnp.logical_or(terminated, truncated)
-        info: dict[str, jax.Array] = {"terminated": terminated, "truncated": truncated}
+        info: dict[str, jax.Array] = {}
 
-        return obs, next_state, reward, done, info
+        return obs, next_state, reward, terminated, truncated, info

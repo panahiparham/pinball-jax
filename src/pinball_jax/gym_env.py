@@ -5,8 +5,11 @@ interface described here.  New-style environments implementing
 ``EnvProtocol`` should be wrapped with ``make_gymnax_compat_env`` before
 being passed to any ``make_train`` function.
 
-Copied from:
+Adapted from:
 https://github.com/andnp/jax-research-template/blob/main/libs/rl-components/src/rl_components/gym_env.py
+
+``step`` differs from the source: it returns separate ``terminated`` and
+``truncated`` signals instead of a single combined ``done`` flag.
 """
 
 from __future__ import annotations
@@ -48,4 +51,4 @@ class GymEnv[ActionSpaceT](Protocol):
         state: Any,
         action: jax.Array,
         params: object | None = None,
-    ) -> tuple[jax.Array, object, jax.Array, jax.Array, dict[str, jax.Array]]: ...
+    ) -> tuple[jax.Array, object, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]]: ...
