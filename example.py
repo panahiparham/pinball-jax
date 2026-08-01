@@ -2,7 +2,7 @@
 
 Run with::
 
-    uv run --python 3.12 python example.py
+    uv run --python 3.13 python example.py
 """
 
 import jax
