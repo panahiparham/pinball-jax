@@ -10,11 +10,13 @@ https://github.com/andnp/jax-research-template/blob/main/libs/rl-components/src/
 
 ``step`` differs from the source: it returns separate ``terminated`` and
 ``truncated`` signals instead of a single combined ``done`` flag.
+``GymEnv`` is also marked ``@runtime_checkable`` so conformance can be
+verified with ``isinstance`` in tests.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -38,6 +40,7 @@ class ContinuousActionSpace(Protocol):
     def shape(self) -> tuple[int, ...]: ...
 
 
+@runtime_checkable
 class GymEnv[ActionSpaceT](Protocol):
     def observation_space(self, params: object | None = None) -> ObservationSpace: ...
 
