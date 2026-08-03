@@ -19,3 +19,5 @@ artifacts = ["*.cfg"]
 
 [dependency-groups]
 dev = ["pytest", "numpy"]
+# For benchmark_dqn.py: uv run --group benchmark python benchmark_dqn.py
+benchmark = ["optax", "matplotlib", "numpy"]

@@ -33,6 +33,35 @@ obs, state, reward, terminated, truncated, info = env.step(key, state, 0, params
 Five domains are bundled and selectable by name: `empty`, `box`, `easy`,
 `medium`, `hard`. See [`example.py`](example.py) for a jitted `lax.scan` rollout.
 
-## Status
+## Benchmark
 
-Early development.
+[`benchmark_dqn.py`](benchmark_dqn.py) trains a small DQN and a uniform-random
+agent on Pinball `easy` for 100k timesteps across 30 seeds (each agent is a
+single `jax.vmap` over seeds). Since reward is -1 per step, an episode's return
+is minus its length, so higher (closer to 0) means the ball reaches the goal
+faster; the plot below shows mean episodic return over time with 95% bootstrap
+confidence bands.
+
+![DQN vs. random agent on Pinball easy](benchmark_dqn.png)
+
+(vector version: [`benchmark_dqn.pdf`](benchmark_dqn.pdf))
+
+Run it with:
+
+```sh
+uv run --group benchmark python benchmark_dqn.py
+```
+
+Default DQN hyperparameters for Pinball `easy`:
+
+| Hyperparameter        | Value        |
+| --------------------- | ------------ |
+| Learning rate         | 0.002        |
+| Optimizer             | Adam         |
+| Replay buffer size    | 10,000       |
+| Batch size            | 32           |
+| Learning starts       | 1,000 steps  |
+| Target refresh        | every 100 steps (hard copy) |
+| Discount (`gamma`)    | 0.99         |
+| Epsilon (constant)    | 0.1          |
+| Hidden layers         | 2 × 32 (ReLU) |
