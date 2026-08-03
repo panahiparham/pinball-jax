@@ -5,6 +5,25 @@ driven by cardinal-direction impulses and drag, bouncing off polygon obstacles,
 with the episode terminating when it reaches a circular target. `reset` and
 `step` are pure functions and are fully JIT- and vmap-able.
 
+This project is a JAX re-implementation of the Pinball environment originally
+introduced in [1]. It has recently been used to evaluate Goal-Space Planning
+[2], a subgoal model planning method, and Endpoint Replay [3], a replay buffer
+compression method.
+
+## References
+
+[1] Konidaris, G. D., & Barto, A. G. (2009). [Skill Discovery in Continuous
+Reinforcement Learning Domains using Skill Chaining](https://proceedings.neurips.cc/paper/2009/hash/e0cf1f47118daebc5b16269099ad7347-Abstract.html).
+*Advances in Neural Information Processing Systems*, 22, 1015–1023.
+
+[2] Lo, C., Roice, K., Panahi, P. M., Jordan, S., White, A., Mihucz, G.,
+Aminmansour, F., & White, M. (2024). [Goal-Space Planning with Subgoal Models](https://jmlr.org/papers/v25/24-0040.html).
+*Journal of Machine Learning Research*, 25(330), 1–57.
+
+[3] Panahi, P. M., Ashrafi, A., Du, H., Patterson, A., White, M., & White, A.
+(2026). [Endpoint Replay: Compressing the Recency Buffer in Deep Reinforcement
+Learning](https://arxiv.org/abs/2607.25123). *Reinforcement Learning Journal*.
+
 ## Installation
 
 Add it to your project with [uv](https://docs.astral.sh/uv/):
