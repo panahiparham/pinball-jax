@@ -1,9 +1,10 @@
 """Standalone benchmark: DQN vs. a uniform-random agent on Pinball ``easy``.
 
 Runs both agents for 30 seeds (each is one ``jax.vmap`` over seeds), then plots
-their mean episodic return over time with 95% bootstrap confidence bands and
-writes ``benchmark_dqn.pdf``. A single self-contained file, with no experiment
-harness or results database.
+their mean episodic return over time with 95% bootstrap confidence bands,
+alongside one seed's state-occupancy heatmap over its *entire training
+lifetime* for each agent. Writes ``benchmark_dqn.pdf``. A single
+self-contained file, with no experiment harness or results database.
 
 Run with::
 
@@ -27,6 +28,7 @@ import numpy as np
 import optax
 
 from pinball_jax import Pinball, PinballParams
+from pinball_jax.visualization import HeatmapAnimator, Trajectory
 
 # --- configuration ----------------------------------------------------------
 
@@ -34,6 +36,7 @@ SETTING = "easy"
 EPISODE_CUTOFF = 1_000
 TOTAL_TIMESTEPS = 100_000
 N_SEEDS = 30
+HEATMAP_SEED = 0  # which of the N_SEEDS training runs to visualize as a lifetime occupancy heatmap
 
 # DQN hyperparameters (from coresets pinball_1000/large.json).
 LR = 0.002
@@ -108,8 +111,9 @@ def buffer_sample(b, key):
 
 
 # --- one agent-environment interaction, per seed ----------------------------
-# Each returns per-timestep metrics {reward, terminated, truncated}; vmapping
-# over the rng key runs N_SEEDS of them at once.
+# Each returns per-timestep metrics {reward, terminated, truncated, obs}
+# (obs is the true post-step observation, i.e. before any auto-reset);
+# vmapping over the rng key runs N_SEEDS of them at once.
 
 def _reset(key):
     return env.reset(key, env_params)
@@ -130,9 +134,10 @@ def random_train(rng):
         next_obs, next_state, reward, term, trunc, _ = _step_env(k_step, state, action)
         done = term | trunc
         r_obs, r_state = _reset(k_reset)
-        next_obs = jnp.where(done, r_obs, next_obs)
-        next_state = jax.tree.map(lambda a, b: jnp.where(done, a, b), r_state, next_state)
-        return (next_state, next_obs, rng), {"reward": reward, "terminated": term, "truncated": trunc}
+        carry_obs = jnp.where(done, r_obs, next_obs)
+        carry_state = jax.tree.map(lambda a, b: jnp.where(done, a, b), r_state, next_state)
+        metrics = {"reward": reward, "terminated": term, "truncated": trunc, "obs": next_obs}
+        return (carry_state, carry_obs, rng), metrics
 
     _, metrics = jax.lax.scan(step, (state, obs, rng), jnp.arange(TOTAL_TIMESTEPS))
     return metrics
@@ -159,8 +164,8 @@ def dqn_train(rng):
 
         done = term | trunc
         r_obs, r_state = _reset(k_reset)
-        next_obs = jnp.where(done, r_obs, next_obs)
-        next_state = jax.tree.map(lambda a, b: jnp.where(done, a, b), r_state, next_state)
+        carry_obs = jnp.where(done, r_obs, next_obs)
+        carry_state = jax.tree.map(lambda a, b: jnp.where(done, a, b), r_state, next_state)
 
         def do_train(params, opt_state):
             b_obs, b_a, b_r, b_nobs, b_term = buffer_sample(buffer, k_sample)
@@ -180,8 +185,9 @@ def dqn_train(rng):
         )
         target = jax.lax.cond(t % TARGET_REFRESH == 0, lambda: params, lambda: target)
 
-        carry = (params, target, opt_state, buffer, next_state, next_obs, rng)
-        return carry, {"reward": reward, "terminated": term, "truncated": trunc}
+        carry = (params, target, opt_state, buffer, carry_state, carry_obs, rng)
+        metrics = {"reward": reward, "terminated": term, "truncated": trunc, "obs": next_obs}
+        return carry, metrics
 
     carry0 = (params, target, opt_state, buffer, state, obs, rng)
     _, metrics = jax.lax.scan(step, carry0, jnp.arange(TOTAL_TIMESTEPS))
@@ -193,6 +199,16 @@ def run(train_fn):
     keys = jax.vmap(jax.random.key)(jnp.arange(N_SEEDS))
     out = jax.jit(jax.vmap(train_fn))(keys)
     return {k: np.asarray(v) for k, v in out.items()}
+
+
+# --- lifetime state-occupancy (one seed's full training history) ------------
+
+
+def lifetime_trajectory(metrics, seed_idx=HEATMAP_SEED) -> Trajectory:
+    """One seed's full training-lifetime state history, as a `Trajectory` for occupancy plots."""
+    obs_seq = metrics["obs"][seed_idx]
+    terminated = metrics["terminated"][seed_idx].astype(bool)
+    return Trajectory(x=obs_seq[:, 0], y=obs_seq[:, 1], xdot=obs_seq[:, 2], ydot=obs_seq[:, 3], terminated=terminated)
 
 
 # --- return-over-time analysis (episodic return; no smoothing) --------------
@@ -239,23 +255,35 @@ def bootstrap_mean_ci(stack, n_boot=10_000, lo=2.5, hi=97.5, seed=0):
     return mean, ci_lo, ci_hi
 
 
-def make_plot(dqn_metrics, random_metrics, path):
-    fig, ax = plt.subplots(figsize=(9, 6))   # 2:3 height:width
+def make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, path):
+    """1x3 figure: learning curves, then each agent's lifetime state-occupancy heatmap."""
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5), gridspec_kw={"width_ratios": [1.6, 1, 1]})
+
+    curve_ax = axes[0]
     for label, color, metrics in [("DQN", "tab:blue", dqn_metrics),
                                   ("Random Agent", "tab:red", random_metrics)]:
         mean, ci_lo, ci_hi = bootstrap_mean_ci(seed_grids(metrics), n_boot=10_000)
         m = ~np.isnan(mean)
-        ax.fill_between(GRID[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)   # light matched band
-        ax.plot(GRID[m], mean[m], lw=2.5, color=color, label=label)           # thick mean
+        curve_ax.fill_between(GRID[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)  # light matched band
+        curve_ax.plot(GRID[m], mean[m], lw=2.5, color=color, label=label)          # thick mean
 
-    ax.set_title(f"DQN vs. Random Agent on Pinball {SETTING}  (mean ± 95% bootstrap CI, n={N_SEEDS} seeds)")
-    ax.set_xlabel("Timestep")
-    ax.set_ylabel("Return", rotation=0, ha="right", va="center", labelpad=12)
-    ax.set_ylim(-1000, 0)
-    ax.grid(False)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.legend(loc="lower right", frameon=False)
+    curve_ax.set_title("Learning curves")
+    curve_ax.set_xlabel("Timestep")
+    curve_ax.set_ylabel("Return", rotation=0, ha="right", va="center", labelpad=12)
+    curve_ax.set_ylim(-1000, 0)
+    curve_ax.grid(False)
+    curve_ax.spines["top"].set_visible(False)
+    curve_ax.spines["right"].set_visible(False)
+    curve_ax.legend(loc="lower right", frameon=False)
+
+    for ax, traj, title in [
+        (axes[1], random_traj, "Random Agent lifetime state occupancy"),
+        (axes[2], dqn_traj, "DQN lifetime state occupancy"),
+    ]:
+        animator = HeatmapAnimator(ax, env, traj, bins=40)
+        animator.update(len(traj.x) - 1)  # no ticks/labels: HeatmapAnimator styles the axes itself
+        ax.set_title(title)
+
     fig.tight_layout()
     for p in (path, path.replace(".pdf", ".png")):   # PDF (vector) + PNG (renders on GitHub)
         fig.savefig(p, bbox_inches="tight", dpi=150)
@@ -263,11 +291,18 @@ def make_plot(dqn_metrics, random_metrics, path):
 
 
 def main():
-    for name, fn in [("DQN", dqn_train), ("random", random_train)]:
-        t = time.perf_counter()
-        globals()[f"{name}_metrics"] = run(fn)
-        print(f"{name}: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
-    make_plot(DQN_metrics, random_metrics, "benchmark_dqn.pdf")  # noqa: F821
+    t = time.perf_counter()
+    dqn_metrics = run(dqn_train)
+    print(f"DQN: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
+
+    t = time.perf_counter()
+    random_metrics = run(random_train)
+    print(f"random: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
+
+    dqn_traj = lifetime_trajectory(dqn_metrics)
+    random_traj = lifetime_trajectory(random_metrics)
+
+    make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, "benchmark_dqn.pdf")
 
 
 if __name__ == "__main__":
