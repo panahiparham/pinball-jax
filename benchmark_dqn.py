@@ -3,8 +3,11 @@
 Runs both agents for 30 seeds (each is one ``jax.vmap`` over seeds), then plots
 their mean episodic return over time with 95% bootstrap confidence bands,
 alongside one seed's state-occupancy heatmap over its *entire training
-lifetime* for each agent. Writes ``benchmark_dqn.pdf``. A single
-self-contained file, with no experiment harness or results database.
+lifetime* for each agent. Writes ``benchmark_dqn.pdf``.
+
+The agent/environment interaction code (Q-network, replay buffer, random and
+DQN training loops) lives in ``benchmark_common.py``, shared with
+``benchmark_throughput.py``.
 
 Run with::
 
@@ -35,167 +38,10 @@ TOTAL_TIMESTEPS = 100_000
 N_SEEDS = 30
 HEATMAP_SEED = 0  # which of the N_SEEDS training runs to visualize as a lifetime occupancy heatmap
 
-# DQN hyperparameters (from coresets pinball_1000/large.json).
-LR = 0.002
-BUFFER_SIZE = 10_000
-BATCH_SIZE = 32
-LEARNING_STARTS = 1_000
-TARGET_REFRESH = 100          # hard target-network copy every N steps
-GAMMA = 0.99
-EPSILON = 0.1                 # constant epsilon-greedy
-HIDDEN_SIZE = 32
-
 env = Pinball(SETTING)
 env_params = PinballParams(max_steps_in_episode=EPISODE_CUTOFF)
 ACTION_DIM = env.action_space(env_params).n
 OBS_DIM = int(np.prod(env.observation_space(env_params).shape))
-optimizer = optax.adam(LR)
-
-
-# --- Q-network (a plain MLP as a list of (W, b) params) ---------------------
-
-def init_mlp(key, sizes):
-    params = []
-    for fan_in, fan_out in zip(sizes[:-1], sizes[1:]):
-        key, k = jax.random.split(key)
-        w = jax.random.normal(k, (fan_in, fan_out)) * jnp.sqrt(2.0 / fan_in)  # He init
-        params.append((w, jnp.zeros(fan_out)))
-    return params
-
-
-def mlp(params, x):
-    """Q-values for a single obs ``(OBS_DIM,)`` or a batch ``(B, OBS_DIM)``."""
-    for w, b in params[:-1]:
-        x = jax.nn.relu(x @ w + b)
-    w, b = params[-1]
-    return x @ w + b
-
-
-# --- uniform replay buffer (fixed-size, in-JAX) -----------------------------
-
-class Buffer(NamedTuple):
-    obs: jax.Array
-    action: jax.Array
-    reward: jax.Array
-    next_obs: jax.Array
-    terminated: jax.Array
-    pos: jax.Array      # number of transitions ever added
-    size: jax.Array     # number currently stored (<= BUFFER_SIZE)
-
-
-def buffer_init():
-    z = jnp.zeros((BUFFER_SIZE, OBS_DIM), dtype=jnp.float32)
-    return Buffer(
-        obs=z, action=jnp.zeros(BUFFER_SIZE, jnp.int32), reward=jnp.zeros(BUFFER_SIZE),
-        next_obs=z, terminated=jnp.zeros(BUFFER_SIZE, bool),
-        pos=jnp.int32(0), size=jnp.int32(0),
-    )
-
-
-def buffer_add(b, obs, action, reward, next_obs, terminated):
-    i = b.pos % BUFFER_SIZE
-    return Buffer(
-        obs=b.obs.at[i].set(obs), action=b.action.at[i].set(action),
-        reward=b.reward.at[i].set(reward), next_obs=b.next_obs.at[i].set(next_obs),
-        terminated=b.terminated.at[i].set(terminated),
-        pos=b.pos + 1, size=jnp.minimum(b.size + 1, BUFFER_SIZE),
-    )
-
-
-def buffer_sample(b, key):
-    idx = jax.random.randint(key, (BATCH_SIZE,), 0, b.size)
-    return b.obs[idx], b.action[idx], b.reward[idx], b.next_obs[idx], b.terminated[idx]
-
-
-# --- one agent-environment interaction, per seed ----------------------------
-# Each returns per-timestep metrics {reward, terminated, truncated, obs}
-# (obs is the true post-step observation, i.e. before any auto-reset);
-# vmapping over the rng key runs N_SEEDS of them at once.
-
-def _reset(key):
-    return env.reset(key, env_params)
-
-
-def _step_env(key, state, action):
-    return env.step(key, state, action, env_params)
-
-
-def random_train(rng):
-    rng, k = jax.random.split(rng)
-    obs, state = _reset(k)
-
-    def step(carry, _):
-        state, obs, rng = carry
-        rng, k_a, k_step, k_reset = jax.random.split(rng, 4)
-        action = jax.random.randint(k_a, (), 0, ACTION_DIM, dtype=jnp.int32)
-        next_obs, next_state, reward, term, trunc, _ = _step_env(k_step, state, action)
-        done = term | trunc
-        r_obs, r_state = _reset(k_reset)
-        carry_obs = jnp.where(done, r_obs, next_obs)
-        carry_state = jax.tree.map(lambda a, b: jnp.where(done, a, b), r_state, next_state)
-        metrics = {"reward": reward, "terminated": term, "truncated": trunc, "obs": next_obs}
-        return (carry_state, carry_obs, rng), metrics
-
-    _, metrics = jax.lax.scan(step, (state, obs, rng), jnp.arange(TOTAL_TIMESTEPS))
-    return metrics
-
-
-def dqn_train(rng):
-    rng, k_init, k_reset = jax.random.split(rng, 3)
-    params = init_mlp(k_init, [OBS_DIM, HIDDEN_SIZE, HIDDEN_SIZE, ACTION_DIM])
-    target = params
-    opt_state = optimizer.init(params)
-    buffer = buffer_init()
-    obs, state = _reset(k_reset)
-
-    def step(carry, t):
-        params, target, opt_state, buffer, state, obs, rng = carry
-        rng, k_a, k_expl, k_step, k_reset, k_sample = jax.random.split(rng, 6)
-
-        greedy = jnp.argmax(mlp(params, obs)).astype(jnp.int32)
-        rand_a = jax.random.randint(k_a, (), 0, ACTION_DIM, dtype=jnp.int32)
-        action = jnp.where(jax.random.uniform(k_expl) < EPSILON, rand_a, greedy)
-
-        next_obs, next_state, reward, term, trunc, _ = _step_env(k_step, state, action)
-        buffer = buffer_add(buffer, obs, action, reward, next_obs, term)
-
-        done = term | trunc
-        r_obs, r_state = _reset(k_reset)
-        carry_obs = jnp.where(done, r_obs, next_obs)
-        carry_state = jax.tree.map(lambda a, b: jnp.where(done, a, b), r_state, next_state)
-
-        def do_train(params, opt_state):
-            b_obs, b_a, b_r, b_nobs, b_term = buffer_sample(buffer, k_sample)
-
-            def loss_fn(p):
-                q_a = jnp.take_along_axis(mlp(p, b_obs), b_a[:, None], axis=-1).squeeze(-1)
-                target_q = b_r + GAMMA * jnp.max(mlp(target, b_nobs), axis=-1) * (1.0 - b_term)
-                return jnp.mean((q_a - jax.lax.stop_gradient(target_q)) ** 2)
-
-            loss, grads = jax.value_and_grad(loss_fn)(params)
-            updates, opt_state = optimizer.update(grads, opt_state)
-            return optax.apply_updates(params, updates), opt_state, loss
-
-        can_train = (t >= LEARNING_STARTS) & (buffer.size >= BATCH_SIZE)
-        params, opt_state, _ = jax.lax.cond(
-            can_train, do_train, lambda p, o: (p, o, jnp.float32(0.0)), params, opt_state
-        )
-        target = jax.lax.cond(t % TARGET_REFRESH == 0, lambda: params, lambda: target)
-
-        carry = (params, target, opt_state, buffer, carry_state, carry_obs, rng)
-        metrics = {"reward": reward, "terminated": term, "truncated": trunc, "obs": next_obs}
-        return carry, metrics
-
-    carry0 = (params, target, opt_state, buffer, state, obs, rng)
-    _, metrics = jax.lax.scan(step, carry0, jnp.arange(TOTAL_TIMESTEPS))
-    return metrics
-
-
-def run(train_fn):
-    """Run one agent for N_SEEDS seeds; returns metrics dict of [N_SEEDS, T] arrays."""
-    keys = jax.vmap(jax.random.key)(jnp.arange(N_SEEDS))
-    out = jax.jit(jax.vmap(train_fn))(keys)
-    return {k: np.asarray(v) for k, v in out.items()}
 
 
 # --- lifetime state-occupancy (one seed's full training history) ------------
@@ -293,12 +139,17 @@ def make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, path):
 
 
 def main():
+    random_train = partial(bm.random_train, env=env, env_params=env_params,
+                           action_dim=ACTION_DIM, total_timesteps=TOTAL_TIMESTEPS)
+    dqn_train = partial(bm.dqn_train, env=env, env_params=env_params,
+                        obs_dim=OBS_DIM, action_dim=ACTION_DIM, total_timesteps=TOTAL_TIMESTEPS)
+
     t = time.perf_counter()
-    dqn_metrics = run(dqn_train)
+    dqn_metrics = bm.run(dqn_train, N_SEEDS)
     print(f"DQN: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
 
     t = time.perf_counter()
-    random_metrics = run(random_train)
+    random_metrics = bm.run(random_train, N_SEEDS)
     print(f"random: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
 
     dqn_traj = lifetime_trajectory(dqn_metrics)
