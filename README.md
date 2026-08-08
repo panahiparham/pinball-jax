@@ -24,15 +24,13 @@ Aminmansour, F., & White, M. (2024). [Goal-Space Planning with Subgoal Models](h
 (2026). [Endpoint Replay: Compressing the Recency Buffer in Deep Reinforcement
 Learning](https://arxiv.org/abs/2607.25123). *Reinforcement Learning Journal*.
 
-## Installation
+## Usage
 
 Add it to your project with [uv](https://docs.astral.sh/uv/):
 
 ```sh
 uv add git+https://github.com/panahiparham/pinball-jax
 ```
-
-## Usage
 
 ```python
 import jax
@@ -49,19 +47,82 @@ obs, state = env.reset(key)
 obs, state, reward, terminated, truncated, info = env.step(key, state, 0, params)
 ```
 
-Five domains are bundled and selectable by name: `empty`, `box`, `easy`,
-`medium`, `hard`. See [`example.py`](example.py) for a jitted `lax.scan` rollout.
+See [`example.py`](example.py) for a jitted `lax.scan` rollout.
 
-## Benchmark
+### Visualizing behavior
+
+[`pinball_jax.visualization`](src/pinball_jax/visualization.py) records and
+renders agent behavior; it needs `matplotlib` (`uv sync --group viz`, or the
+`benchmark` group, which already includes it):
+
+```python
+import jax
+from pinball_jax import Pinball
+from pinball_jax.visualization import (
+    TransitionRecorder, record_rollout, save_behavior_gif, save_occupancy_heatmap_gif,
+)
+
+env = Pinball("easy")
+recorder = TransitionRecorder()
+record_rollout(env, jax.random.key(0), recorder, max_steps=400)  # uniform-random policy by default
+trajectory = recorder.trajectory()
+
+save_behavior_gif(env, trajectory, "behavior.gif")
+save_occupancy_heatmap_gif(env, trajectory, "occupancy.gif")
+```
+
+`TransitionRecorder.record` is a thin `jax.experimental.io_callback` wrapper,
+so it can also be called from inside a jitted interaction loop of your own (a
+training loop's `lax.scan`/`while_loop` body) to capture transitions without
+breaking `jit`.
+
+## Environment
+
+An observation is `[x, y, xdot, ydot]`: position in the unit square `[0, 1]^2`
+(the same coordinate system obstacles, the start, and the target are defined
+in) and velocity, clipped to `[-1, 1]` per axis.
+
+There are 5 discrete actions: accelerate `+x`, accelerate `+y`, accelerate
+`-x`, accelerate `-y`, or apply no force. Each of the four thrust actions adds
+a fixed impulse (clipped so velocity stays in `[-1, 1]`) on the first of the 20
+physics substeps that make up one `step` call.
+
+Reward is -1 every step, so an episode's return is exactly -(its length): the
+sooner the ball reaches the target, the higher (closer to 0) the return.
+
+An episode terminates once the ball's center comes within the target's radius
+of the target position, and truncates after `max_steps_in_episode` steps
+regardless (1000 by default).
+
+Each `step` runs 20 physics substeps. Drag (a 0.995 multiplicative decay per
+step) and boundary clamping are applied once, after the substeps (skipped if
+the ball reached the target that step). Colliding with a polygon obstacle
+reflects velocity off the edge it hit; hitting a corner (two edges at once)
+negates velocity outright.
+
+### Variants
+
+Five domains are bundled and selectable by name: `empty`, `box`, `easy`,
+`medium`, `hard` (see [`src/pinball_jax/configs/`](src/pinball_jax/configs/)).
+They share the same physics and differ only in their obstacles, start, and
+target: `empty` has no interior obstacles, `box` adds a single small block,
+and `easy`/`medium`/`hard` are progressively denser mazes.
+
+The animation below runs a uniform-random policy on each variant for one
+episode: ball behavior on top, the resulting state-occupancy heatmap
+(aggregated over the velocity dimensions) on the bottom.
+
+![Random-policy behavior and state occupancy across all five Pinball variants](pinball_variants.gif)
+
+## Benchmarks
 
 [`benchmark_dqn.py`](benchmark_dqn.py) trains a small DQN and a uniform-random
 agent on Pinball `easy` for 100k timesteps across 30 seeds (each agent is a
-single `jax.vmap` over seeds). Since reward is -1 per step, an episode's return
-is minus its length, so higher (closer to 0) means the ball reaches the goal
-faster; the plot below shows mean episodic return over time with 95% bootstrap
-confidence bands.
+single `jax.vmap` over seeds), then plots mean episodic return over time with
+95% bootstrap confidence bands, alongside one seed's state-occupancy heatmap
+over its entire training lifetime for each agent.
 
-![DQN vs. random agent on Pinball easy](benchmark_dqn.png)
+![DQN vs. random agent on Pinball easy: learning curves and lifetime state occupancy](benchmark_dqn.png)
 
 (vector version: [`benchmark_dqn.pdf`](benchmark_dqn.pdf))
 
