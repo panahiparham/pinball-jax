@@ -21,3 +21,5 @@ artifacts = ["*.cfg"]
 dev = ["pytest", "numpy"]
 # For benchmark_dqn.py: uv run --group benchmark python benchmark_dqn.py
 benchmark = ["optax", "matplotlib", "numpy"]
+# For pinball_jax.visualization: uv run --group viz python your_script.py
+viz = ["matplotlib", "numpy"]
