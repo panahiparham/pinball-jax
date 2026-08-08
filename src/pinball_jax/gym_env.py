@@ -1,7 +1,7 @@
 """Gymnax-style environment Protocol for RL agent typing.
 
 Agents built on the Gymnax compatibility layer accept the tuple-returning
-interface described here.  New-style environments implementing
+interface described here. New-style environments implementing
 ``EnvProtocol`` should be wrapped with ``make_gymnax_compat_env`` before
 being passed to any ``make_train`` function.
 

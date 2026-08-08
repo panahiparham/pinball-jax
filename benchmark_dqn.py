@@ -2,8 +2,8 @@
 
 Runs both agents for 30 seeds (each is one ``jax.vmap`` over seeds), then plots
 their mean episodic return over time with 95% bootstrap confidence bands and
-writes ``benchmark_dqn.pdf``. No experiment harness, no results database — a
-single self-contained file.
+writes ``benchmark_dqn.pdf``. A single self-contained file, with no experiment
+harness or results database.
 
 Run with::
 

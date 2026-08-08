@@ -17,8 +17,9 @@ by Pierre-Luc Bacon). Implementation notes on the physics:
 * Collision detection is vectorized over all obstacle edges. Per obstacle we
   only need the *number* of intercepting edges: ``>=1`` means a collision,
   ``>=2`` means a corner hit (velocity is negated). The reference's
-  ``_select_edge`` tie-break is dead code — its result feeds only the
-  non-corner branch, which never runs when selection happens — so it is omitted.
+  ``_select_edge`` tie-break is dead code (its result feeds only the
+  non-corner branch, which never runs when selection happens), so it is
+  omitted.
 * Across obstacles: exactly one colliding obstacle applies its reflection;
   more than one negates the velocity.
 """
