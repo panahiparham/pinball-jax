@@ -176,12 +176,12 @@ simple grid update, so larger environment counts use fewer steps.
 
 | Implementation | Environments | Steps/sec | Speedup vs. numpy |
 | --- | --- | --- | --- |
-| reference (numpy) | 1 | 6,224 | 1x |
-| pinball-jax | 1 | 34,400 | 5.5x |
-| pinball-jax | 8 | 75,100 | 12x |
-| pinball-jax | 64 | 45,000 | 7.2x |
-| pinball-jax | 512 | 53,300 | 8.6x |
-| pinball-jax | 4096 | 103,000 | 17x |
+| reference (numpy) | 1 | 6,278 | 1x |
+| pinball-jax | 1 | 34,700 | 5.5x |
+| pinball-jax | 8 | 74,100 | 12x |
+| pinball-jax | 64 | 44,400 | 7.1x |
+| pinball-jax | 512 | 55,100 | 8.8x |
+| pinball-jax | 4096 | 121,000 | 19x |
 
 **Agent throughput on pinball-jax**
 
@@ -191,5 +191,5 @@ streams like these rather than by batching environments under one agent.
 
 | Agent | Steps/sec |
 | --- | --- |
-| Random | 32,900 |
-| DQN | 18,100 |
+| Random | 35,000 |
+| DQN | 18,200 |
