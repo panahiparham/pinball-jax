@@ -103,11 +103,6 @@ def make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, path):
     fig, axes = plt.subplots(1, 3, figsize=(16, 5), gridspec_kw={"width_ratios": [1.6, 1, 1]})
 
     curve_ax = axes[0]
-def make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, path):
-    """1x3 figure: learning curves, then each agent's lifetime state-occupancy heatmap."""
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), gridspec_kw={"width_ratios": [1.6, 1, 1]})
-
-    curve_ax = axes[0]
     for label, color, metrics in [("DQN", "tab:blue", dqn_metrics),
                                   ("Random Agent", "tab:red", random_metrics)]:
         mean, ci_lo, ci_hi = bootstrap_mean_ci(seed_grids(metrics), n_boot=10_000)
