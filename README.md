@@ -132,7 +132,6 @@ single `jax.vmap` over seeds), then plots mean episodic return over time with
 over its entire training lifetime for each agent.
 
 ![DQN vs. random agent on Pinball easy: learning curves and lifetime state occupancy](benchmark_dqn.png)
-![DQN vs. random agent on Pinball easy: learning curves and lifetime state occupancy](benchmark_dqn.png)
 
 (vector version: [`benchmark_dqn.pdf`](benchmark_dqn.pdf))
 
