@@ -33,7 +33,8 @@ def trajectory() -> Trajectory:
 
 def test_record_rollout_captures_an_episode(trajectory: Trajectory) -> None:
     assert 2 <= len(trajectory.x) <= 26  # +1 for the reset frame
-    assert trajectory.x.shape == trajectory.y.shape == trajectory.xdot.shape == trajectory.ydot.shape
+    fields = (trajectory.x, trajectory.y, trajectory.xdot, trajectory.ydot)
+    assert len({f.shape for f in fields}) == 1
     assert trajectory.terminated.dtype == bool
     # Ball starts at the "box" config's start position.
     assert trajectory.x[0] == pytest.approx(0.2, abs=1e-6)
@@ -57,7 +58,9 @@ def test_occupancy_histogram_conserves_visit_count(trajectory: Trajectory) -> No
     assert counts.sum() == pytest.approx(len(trajectory.x))
 
 
-def test_save_behavior_gif_writes_an_animated_gif(tmp_path, trajectory: Trajectory) -> None:
+def test_save_behavior_gif_writes_an_animated_gif(
+    tmp_path, trajectory: Trajectory
+) -> None:
     env = Pinball("box")
     path = tmp_path / "behavior.gif"
     save_behavior_gif(env, trajectory, str(path), fps=10)
@@ -68,7 +71,9 @@ def test_save_behavior_gif_writes_an_animated_gif(tmp_path, trajectory: Trajecto
         assert im.n_frames == len(trajectory.x)
 
 
-def test_save_occupancy_heatmap_writes_a_static_image(tmp_path, trajectory: Trajectory) -> None:
+def test_save_occupancy_heatmap_writes_a_static_image(
+    tmp_path, trajectory: Trajectory
+) -> None:
     env = Pinball("box")
     path = tmp_path / "heatmap.png"
     save_occupancy_heatmap(env, trajectory, str(path))
@@ -78,7 +83,9 @@ def test_save_occupancy_heatmap_writes_a_static_image(tmp_path, trajectory: Traj
         assert im.format == "PNG"
 
 
-def test_save_occupancy_heatmap_gif_writes_an_animated_gif(tmp_path, trajectory: Trajectory) -> None:
+def test_save_occupancy_heatmap_gif_writes_an_animated_gif(
+    tmp_path, trajectory: Trajectory
+) -> None:
     env = Pinball("box")
     path = tmp_path / "heatmap.gif"
     save_occupancy_heatmap_gif(env, trajectory, str(path), fps=10, bins=8)
@@ -93,7 +100,9 @@ def test_save_occupancy_heatmap_gif_writes_an_animated_gif(tmp_path, trajectory:
         assert 1 < im.n_frames <= len(trajectory.x)
 
 
-def test_drawing_functions_add_no_ticks_labels_or_titles(trajectory: Trajectory) -> None:
+def test_drawing_functions_add_no_ticks_labels_or_titles(
+    trajectory: Trajectory,
+) -> None:
     """The feature itself never sets ticks/labels/titles; only composing callers do."""
     import matplotlib.pyplot as plt
 

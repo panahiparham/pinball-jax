@@ -36,7 +36,7 @@ SETTING = "easy"
 EPISODE_CUTOFF = 1_000
 TOTAL_TIMESTEPS = 100_000
 N_SEEDS = 30
-HEATMAP_SEED = 0  # which of the N_SEEDS training runs to visualize as a lifetime occupancy heatmap
+HEATMAP_SEED = 0  # which of the N_SEEDS training runs to plot as a lifetime heatmap
 
 env = Pinball(SETTING)
 env_params = PinballParams(max_steps_in_episode=EPISODE_CUTOFF)
@@ -48,10 +48,13 @@ OBS_DIM = int(np.prod(env.observation_space(env_params).shape))
 
 
 def lifetime_trajectory(metrics, seed_idx=HEATMAP_SEED) -> Trajectory:
-    """One seed's full training-lifetime state history, as a `Trajectory` for occupancy plots."""
+    """One seed's full training-lifetime state history, as a `Trajectory`."""
     obs_seq = metrics["obs"][seed_idx]
     terminated = metrics["terminated"][seed_idx].astype(bool)
-    return Trajectory(x=obs_seq[:, 0], y=obs_seq[:, 1], xdot=obs_seq[:, 2], ydot=obs_seq[:, 3], terminated=terminated)
+    return Trajectory(
+        x=obs_seq[:, 0], y=obs_seq[:, 1], xdot=obs_seq[:, 2], ydot=obs_seq[:, 3],
+        terminated=terminated,
+    )
 
 
 # --- return-over-time analysis (episodic return; no smoothing) --------------
@@ -71,12 +74,16 @@ def episode_returns(reward, terminated, truncated):
 
 
 def seed_grids(metrics):
-    """[N_SEEDS, len(GRID)] of each seed's return interpolated onto GRID (NaN outside)."""
+    """[N_SEEDS, len(GRID)]: each seed's return interpolated onto GRID (NaN outside)."""
     grids = []
     for i in range(N_SEEDS):
-        ends, rets = episode_returns(metrics["reward"][i], metrics["terminated"][i], metrics["truncated"][i])
-        grids.append(np.interp(GRID, ends, rets, left=np.nan, right=np.nan) if ends.size
-                     else np.full(GRID.shape, np.nan))
+        ends, rets = episode_returns(
+            metrics["reward"][i], metrics["terminated"][i], metrics["truncated"][i]
+        )
+        grids.append(
+            np.interp(GRID, ends, rets, left=np.nan, right=np.nan)
+            if ends.size else np.full(GRID.shape, np.nan)
+        )
     return np.vstack(grids)
 
 
@@ -99,16 +106,18 @@ def bootstrap_mean_ci(stack, n_boot=10_000, lo=2.5, hi=97.5, seed=0):
 
 
 def make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, path):
-    """1x3 figure: learning curves, then each agent's lifetime state-occupancy heatmap."""
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), gridspec_kw={"width_ratios": [1.6, 1, 1]})
+    """1x3 figure: learning curves, then each agent's lifetime occupancy heatmap."""
+    fig, axes = plt.subplots(
+        1, 3, figsize=(16, 5), gridspec_kw={"width_ratios": [1.6, 1, 1]}
+    )
 
     curve_ax = axes[0]
     for label, color, metrics in [("DQN", "tab:blue", dqn_metrics),
                                   ("Random Agent", "tab:red", random_metrics)]:
         mean, ci_lo, ci_hi = bootstrap_mean_ci(seed_grids(metrics), n_boot=10_000)
         m = ~np.isnan(mean)
-        curve_ax.fill_between(GRID[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)  # light matched band
-        curve_ax.plot(GRID[m], mean[m], lw=2.5, color=color, label=label)          # thick mean
+        curve_ax.fill_between(GRID[m], ci_lo[m], ci_hi[m], color=color, alpha=0.2)
+        curve_ax.plot(GRID[m], mean[m], lw=2.5, color=color, label=label)  # thick mean
 
     curve_ax.set_title("Learning curves")
     curve_ax.set_xlabel("Timestep")
@@ -124,28 +133,35 @@ def make_plot(dqn_metrics, random_metrics, random_traj, dqn_traj, path):
         (axes[2], dqn_traj, "DQN lifetime state occupancy"),
     ]:
         animator = HeatmapAnimator(ax, env, traj, bins=40)
-        animator.update(len(traj.x) - 1)  # no ticks/labels: HeatmapAnimator styles the axes itself
+        animator.update(len(traj.x) - 1)  # HeatmapAnimator styles the axes itself
         ax.set_title(title)
 
     fig.tight_layout()
-    for p in (path, path.replace(".pdf", ".png")):   # PDF (vector) + PNG (renders on GitHub)
+    for p in (path, path.replace(".pdf", ".png")):  # PDF (vector) + PNG (for GitHub)
         fig.savefig(p, bbox_inches="tight", dpi=150)
         print(f"saved {p}")
 
 
 def main():
-    random_train = partial(bm.random_train, env=env, env_params=env_params,
-                           action_dim=ACTION_DIM, total_timesteps=TOTAL_TIMESTEPS)
-    dqn_train = partial(bm.dqn_train, env=env, env_params=env_params,
-                        obs_dim=OBS_DIM, action_dim=ACTION_DIM, total_timesteps=TOTAL_TIMESTEPS)
+    """Trains both agents, then writes the learning-curve/occupancy plot."""
+    random_train = partial(
+        bm.random_train, env=env, env_params=env_params,
+        action_dim=ACTION_DIM, total_timesteps=TOTAL_TIMESTEPS,
+    )
+    dqn_train = partial(
+        bm.dqn_train, env=env, env_params=env_params,
+        obs_dim=OBS_DIM, action_dim=ACTION_DIM, total_timesteps=TOTAL_TIMESTEPS,
+    )
 
     t = time.perf_counter()
     dqn_metrics = bm.run(dqn_train, N_SEEDS)
-    print(f"DQN: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
+    elapsed = time.perf_counter() - t
+    print(f"DQN: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {elapsed:.1f}s")
 
     t = time.perf_counter()
     random_metrics = bm.run(random_train, N_SEEDS)
-    print(f"random: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {time.perf_counter() - t:.1f}s")
+    elapsed = time.perf_counter() - t
+    print(f"random: {N_SEEDS} seeds x {TOTAL_TIMESTEPS} steps in {elapsed:.1f}s")
 
     dqn_traj = lifetime_trajectory(dqn_metrics)
     random_traj = lifetime_trajectory(random_metrics)

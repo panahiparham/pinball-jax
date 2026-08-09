@@ -31,7 +31,8 @@ from _reference_pinball import PinballModel
 
 SETTING = "easy"
 EPISODE_CUTOFF = 1_000
-CONFIG_PATH = Path(__file__).parent / "src" / "pinball_jax" / "configs" / f"{SETTING}.cfg"
+CONFIGS_DIR = Path(__file__).parent / "src" / "pinball_jax" / "configs"
+CONFIG_PATH = CONFIGS_DIR / f"{SETTING}.cfg"
 
 env_jax = Pinball(SETTING)
 env_params = PinballParams(max_steps_in_episode=EPISODE_CUTOFF)
@@ -115,11 +116,15 @@ def benchmark_agent(num_steps, n_seeds, agent_name):
     Excludes compilation time via warmup, includes blocking time.
     """
     if agent_name == "Random":
-        train_fn = partial(bm.random_train, env=env_jax, env_params=env_params,
-                          action_dim=ACTION_DIM, total_timesteps=num_steps)
+        train_fn = partial(
+            bm.random_train, env=env_jax, env_params=env_params,
+            action_dim=ACTION_DIM, total_timesteps=num_steps,
+        )
     else:
-        train_fn = partial(bm.dqn_train, env=env_jax, env_params=env_params,
-                          obs_dim=OBS_DIM, action_dim=ACTION_DIM, total_timesteps=num_steps)
+        train_fn = partial(
+            bm.dqn_train, env=env_jax, env_params=env_params, obs_dim=OBS_DIM,
+            action_dim=ACTION_DIM, total_timesteps=num_steps,
+        )
 
     keys = jax.vmap(jax.random.key)(jnp.arange(n_seeds))
     jitted_fn = jax.jit(jax.vmap(train_fn))
@@ -134,6 +139,7 @@ def benchmark_agent(num_steps, n_seeds, agent_name):
 
 
 def main():
+    """Runs both throughput tables and prints them as markdown."""
     print("\n" + "=" * 80)
     print("THROUGHPUT BENCHMARKS: numpy vs. JAX Pinball")
     print("=" * 80)
@@ -165,12 +171,12 @@ def main():
     jax_single_total, jax_single_elapsed = benchmark_jax_single(jax_single_steps)
     jax_single_throughput = jax_single_total / jax_single_elapsed
     jax_single_speedup = jax_single_throughput / numpy_throughput
-    print(f"  JAX 1x1: {format_throughput(jax_single_total, jax_single_elapsed)} steps/sec ({format_speedup(jax_single_speedup)})")
+    throughput_str = format_throughput(jax_single_total, jax_single_elapsed)
+    speedup_str = format_speedup(jax_single_speedup)
+    print(f"  JAX 1x1: {throughput_str} steps/sec ({speedup_str})")
     rows.append({
-        "impl": "pinball-jax",
-        "n_envs": 1,
-        "throughput": format_throughput(jax_single_total, jax_single_elapsed),
-        "speedup": format_speedup(jax_single_speedup),
+        "impl": "pinball-jax", "n_envs": 1,
+        "throughput": throughput_str, "speedup": speedup_str,
     })
 
     # Steps/sec is a rate, independent of step count once compiled, so step count
@@ -184,20 +190,20 @@ def main():
         print(f"Benchmarking JAX vmapped {n_envs} envs with {steps:,} steps per env...")
         total_steps, elapsed = benchmark_jax_vmapped(n_envs, steps)
         throughput = total_steps / elapsed
-        speedup = throughput / numpy_throughput
-        print(f"  JAX {n_envs}x: {format_throughput(total_steps, elapsed)} steps/sec ({format_speedup(speedup)})")
+        throughput_str = format_throughput(total_steps, elapsed)
+        speedup_str = format_speedup(throughput / numpy_throughput)
+        print(f"  JAX {n_envs}x: {throughput_str} steps/sec ({speedup_str})")
         rows.append({
-            "impl": "pinball-jax",
-            "n_envs": n_envs,
-            "throughput": format_throughput(total_steps, elapsed),
-            "speedup": format_speedup(speedup),
+            "impl": "pinball-jax", "n_envs": n_envs,
+            "throughput": throughput_str, "speedup": speedup_str,
         })
 
     print()
     print("| Implementation | Environments | Steps/sec | Speedup vs. numpy |")
     print("|---|---|---|---|")
     for row in rows:
-        print(f"| {row['impl']} | {row['n_envs']} | {row['throughput']} | {row['speedup']} |")
+        cells = [row["impl"], row["n_envs"], row["throughput"], row["speedup"]]
+        print("| " + " | ".join(str(c) for c in cells) + " |")
 
     print()
     print("Table 2: Agent Throughput on pinball-jax")

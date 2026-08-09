@@ -51,7 +51,9 @@ def test_action_space(env: Pinball) -> None:
     assert action_space.n == NUM_ACTIONS
 
 
-def test_reset_returns_observation_and_initial_state(env: Pinball, key: jax.Array) -> None:
+def test_reset_returns_observation_and_initial_state(
+    env: Pinball, key: jax.Array
+) -> None:
     obs, state = env.reset(key)
 
     assert obs.shape == OBSERVATION_SHAPE

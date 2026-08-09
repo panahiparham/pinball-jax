@@ -48,10 +48,14 @@ ACTION_EFFECTS = jnp.asarray(
 
 
 class PinballParams(NamedTuple):
+    """Episode configuration passed to ``Pinball.reset``/``step``."""
+
     max_steps_in_episode: int = DEFAULT_MAX_STEPS_IN_EPISODE
 
 
 class PinballState(NamedTuple):
+    """Ball position and velocity, plus the current episode timestep."""
+
     x: jax.Array
     y: jax.Array
     xdot: jax.Array
@@ -181,8 +185,9 @@ def _angle(v1: jax.Array, v2: jax.Array) -> jax.Array:
 class Pinball:
     """Pinball environment adhering to the ``GymEnv`` protocol.
 
-    :param config: A bundled config name (e.g. ``"box"``, ``"empty"``,
-        ``"easy"``, ``"medium"``, ``"hard"``) or a path to a ``.cfg`` file.
+    Args:
+        config: A bundled config name (e.g. ``"box"``, ``"empty"``,
+            ``"easy"``, ``"medium"``, ``"hard"``) or a path to a ``.cfg`` file.
     """
 
     def __init__(self, config: str | Path) -> None:
@@ -205,17 +210,25 @@ class Pinball:
 
     # -- spaces ------------------------------------------------------------- #
 
-    def observation_space(self, params: PinballParams | None = None) -> ObservationSpace:
+    def observation_space(
+        self, params: PinballParams | None = None
+    ) -> ObservationSpace:
+        """Returns the space describing valid observations."""
         del params
         return _PinballObservationSpace()
 
-    def action_space(self, params: PinballParams | None = None) -> DiscreteActionSpace:
+    def action_space(
+        self, params: PinballParams | None = None
+    ) -> DiscreteActionSpace:
+        """Returns the space describing valid actions."""
         del params
         return _PinballActionSpace()
 
     # -- collision physics -------------------------------------------------- #
 
-    def _resolve_collision(self, pos: jax.Array, vel: jax.Array) -> tuple[jax.Array, jax.Array]:
+    def _resolve_collision(
+        self, pos: jax.Array, vel: jax.Array
+    ) -> tuple[jax.Array, jax.Array]:
         """One collision-resolution pass at ``pos`` with velocity ``vel``.
 
         Returns ``(new_vel[2], ncollision)`` where ``ncollision`` is the number
@@ -259,14 +272,18 @@ class Pinball:
 
         # Reflection effect (non-corner branch), per obstacle.
         obstacle_vec = sel_p1 - sel_p0                # [O, 2]
-        obstacle_vec = jnp.where((obstacle_vec[:, 0] < 0)[:, None], -obstacle_vec, obstacle_vec)
+        flip = (obstacle_vec[:, 0] < 0)[:, None]
+        obstacle_vec = jnp.where(flip, -obstacle_vec, obstacle_vec)
         theta = _angle(jnp.broadcast_to(vel, obstacle_vec.shape), obstacle_vec) - jnp.pi
         theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
-        neg_x = jnp.broadcast_to(jnp.asarray([-1.0, 0.0], dtype=obstacle_vec.dtype), obstacle_vec.shape)
+        neg_x = jnp.broadcast_to(
+            jnp.asarray([-1.0, 0.0], dtype=obstacle_vec.dtype), obstacle_vec.shape
+        )
         theta = theta + _angle(neg_x, obstacle_vec)
         theta = jnp.where(theta > 2 * jnp.pi, theta - 2 * jnp.pi, theta)
         speed = jnp.sqrt(vel[0] ** 2 + vel[1] ** 2)
-        reflect = jnp.stack([speed * jnp.cos(theta), speed * jnp.sin(theta)], axis=-1)  # [O, 2]
+        # [O, 2]
+        reflect = jnp.stack([speed * jnp.cos(theta), speed * jnp.sin(theta)], axis=-1)
 
         # Corner hit within a single obstacle negates the velocity.
         effect = jnp.where(double[:, None], -vel[None, :], reflect)  # [O, 2]
@@ -310,7 +327,8 @@ class Pinball:
             x2 = jnp.where(extra, x1 + nvx * r / 20.0, x1)
             y2 = jnp.where(extra, y1 + nvy * r / 20.0, y1)
 
-            ended = jnp.sqrt((x2 - self.target[0]) ** 2 + (y2 - self.target[1]) ** 2) < self.target_rad
+            dx, dy = x2 - self.target[0], y2 - self.target[1]
+            ended = jnp.sqrt(dx**2 + dy**2) < self.target_rad
 
             # Freeze all updates once the episode has ended.
             x_out = jnp.where(was_done, x, x2)
@@ -320,9 +338,8 @@ class Pinball:
             done_out = was_done | ended
             return (x_out, y_out, vx_out, vy_out, done_out)
 
-        x, y, xdot, ydot, done = jax.lax.fori_loop(
-            0, SUBSTEPS, body, (state.x, state.y, state.xdot, state.ydot, jnp.asarray(False))
-        )
+        carry0 = (state.x, state.y, state.xdot, state.ydot, jnp.asarray(False))
+        x, y, xdot, ydot, done = jax.lax.fori_loop(0, SUBSTEPS, body, carry0)
 
         # Drag and boundary clamping, skipped if the episode ended (the
         # reference early-returns before applying them).
@@ -342,6 +359,7 @@ class Pinball:
         key: jax.Array,
         params: PinballParams | None = None,
     ) -> tuple[jax.Array, PinballState]:
+        """Returns the initial ``(observation, state)`` at a random start point."""
         del params
         idx = jax.random.randint(key, (), 0, self.start_pts.shape[0])
         start = self.start_pts[idx]
@@ -359,7 +377,10 @@ class Pinball:
         state: PinballState,
         action: jax.Array,
         params: PinballParams | None = None,
-    ) -> tuple[jax.Array, PinballState, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]]:
+    ) -> tuple[
+        jax.Array, PinballState, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]
+    ]:
+        """Returns ``(observation, state, reward, terminated, truncated, info)``."""
         del key
         params = params if params is not None else PinballParams()
 
@@ -369,8 +390,8 @@ class Pinball:
 
         obs = jnp.stack([moved.x, moved.y, moved.xdot, moved.ydot]).astype(jnp.float32)
         reward = jnp.asarray(-1.0, dtype=jnp.float32)
-        distance = jnp.sqrt((moved.x - self.target[0]) ** 2 + (moved.y - self.target[1]) ** 2)
-        terminated = distance < self.target_rad
+        dx, dy = moved.x - self.target[0], moved.y - self.target[1]
+        terminated = jnp.sqrt(dx**2 + dy**2) < self.target_rad
         truncated = timestep >= params.max_steps_in_episode
         info: dict[str, jax.Array] = {}
 

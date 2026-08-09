@@ -165,11 +165,7 @@ uv run --group benchmark python benchmark_throughput.py
 
 **Environment throughput, random policy**
 
-The vmapped rows count total steps across all environments. Step count per
-config is chosen to bound wall-clock time (steps/sec is a rate, independent of
-step count once compiled): collision detection against several polygon
-obstacles doesn't vectorize as cheaply across a wide vmap batch as e.g. a
-simple grid update, so larger environment counts use fewer steps.
+The vmapped rows count total steps across all environments.
 
 | Implementation | Environments | Steps/sec | Speedup vs. numpy |
 | --- | --- | --- | --- |

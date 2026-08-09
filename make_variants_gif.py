@@ -23,17 +23,23 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
 from pinball_jax import Pinball
-from pinball_jax.visualization import BehaviorAnimator, HeatmapAnimator, TransitionRecorder, record_rollout
+from pinball_jax.visualization import (
+    BehaviorAnimator,
+    HeatmapAnimator,
+    TransitionRecorder,
+    record_rollout,
+)
 
 CONFIGS = ["empty", "box", "easy", "medium", "hard"]
 SEED = 42
 MAX_STEPS = 400
-STRIDE = 3  # subsample steps per rendered frame, to keep the gif small and fast to render
+STRIDE = 3  # subsample steps per rendered frame, for a small, fast-to-render gif
 BINS = 40
 OUTPUT_PATH = Path("pinball_variants.gif")
 
 
 def main() -> None:
+    """Renders and saves the 2x5 GIF."""
     envs = {}
     trajectories = {}
     for i, name in enumerate(CONFIGS):
@@ -56,7 +62,7 @@ def main() -> None:
 
         behavior_ax = axes[0, col]
         behavior_animators.append(BehaviorAnimator(behavior_ax, env, traj))
-        behavior_ax.set_title(name)  # only titles in the whole figure: top row, config names
+        behavior_ax.set_title(name)  # only titles in the figure: top row, config names
 
         heatmap_ax = axes[1, col]
         heatmap_animators.append(HeatmapAnimator(heatmap_ax, env, traj, bins=BINS))
@@ -74,9 +80,10 @@ def main() -> None:
     anim = FuncAnimation(fig, update, frames=n_frames, interval=40, blit=False)
     anim.save(OUTPUT_PATH, writer=PillowWriter(fps=12), dpi=90)
 
+    size_bytes = OUTPUT_PATH.stat().st_size
     print(f"Output: {OUTPUT_PATH}")
     print(f"Frames: {n_frames}")
-    print(f"Size: {OUTPUT_PATH.stat().st_size} bytes ({OUTPUT_PATH.stat().st_size / 1024:.1f} KB)")
+    print(f"Size: {size_bytes} bytes ({size_bytes / 1024:.1f} KB)")
 
 
 if __name__ == "__main__":

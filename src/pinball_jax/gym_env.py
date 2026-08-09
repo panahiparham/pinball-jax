@@ -23,30 +23,58 @@ import jax.numpy as jnp
 
 
 class ObservationSpace(Protocol):
-    @property
-    def shape(self) -> tuple[int, ...]: ...
+    """Shape and dtype of an environment's observation array."""
 
     @property
-    def dtype(self) -> jnp.dtype: ...
+    def shape(self) -> tuple[int, ...]:
+        """Observation array shape."""
+        ...
+
+    @property
+    def dtype(self) -> jnp.dtype:
+        """Observation array dtype."""
+        ...
 
 
 class DiscreteActionSpace(Protocol):
+    """A discrete action space of ``n`` actions, indexed ``0`` to ``n - 1``."""
+
     @property
-    def n(self) -> int: ...
+    def n(self) -> int:
+        """Number of discrete actions."""
+        ...
 
 
 class ContinuousActionSpace(Protocol):
+    """A continuous action space of the given shape."""
+
     @property
-    def shape(self) -> tuple[int, ...]: ...
+    def shape(self) -> tuple[int, ...]:
+        """Action array shape."""
+        ...
 
 
 @runtime_checkable
 class GymEnv[ActionSpaceT](Protocol):
-    def observation_space(self, params: object | None = None) -> ObservationSpace: ...
+    """Tuple-returning JAX environment interface (Gymnax-style).
 
-    def action_space(self, params: object | None = None) -> ActionSpaceT: ...
+    Implementations are pure functions of an explicit PRNG key and state,
+    making ``reset``/``step`` JIT- and vmap-able.
+    """
 
-    def reset(self, key: jax.Array, params: object | None = None) -> tuple[jax.Array, object]: ...
+    def observation_space(self, params: object | None = None) -> ObservationSpace:
+        """Returns the space describing valid observations."""
+        ...
+
+    def action_space(self, params: object | None = None) -> ActionSpaceT:
+        """Returns the space describing valid actions."""
+        ...
+
+    def reset(
+        self, key: jax.Array, params: object | None = None
+    ) -> tuple[jax.Array, object]:
+        """Returns the initial ``(observation, state)`` for a new episode."""
+        ...
 
     def step(
         self,
@@ -54,4 +82,8 @@ class GymEnv[ActionSpaceT](Protocol):
         state: Any,
         action: jax.Array,
         params: object | None = None,
-    ) -> tuple[jax.Array, object, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]]: ...
+    ) -> tuple[
+        jax.Array, object, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]
+    ]:
+        """Returns ``(observation, state, reward, terminated, truncated, info)``."""
+        ...

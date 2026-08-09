@@ -82,7 +82,14 @@ class TransitionRecorder:
     def record(self, state: PinballState, terminated: jax.Array) -> None:
         """Record one transition. Safe to call from inside a jitted loop body."""
         jax.experimental.io_callback(
-            self._append, None, state.x, state.y, state.xdot, state.ydot, terminated, ordered=True
+            self._append,
+            None,
+            state.x,
+            state.y,
+            state.xdot,
+            state.ydot,
+            terminated,
+            ordered=True,
         )
 
     def trajectory(self) -> Trajectory:
@@ -114,10 +121,16 @@ def record_rollout(
 ) -> None:
     """Run one jitted episode, streaming every transition to ``recorder``.
 
-    ``policy(key, obs) -> action`` defaults to uniform-random over
-    ``env.action_space().n``. The episode stops early once the target is
-    reached or ``max_steps`` is hit, mirroring ``terminated``/``truncated``
-    from :meth:`Pinball.step`.
+    Args:
+        env: The environment to roll out in.
+        key: PRNG key for the episode.
+        recorder: Receives every transition via :meth:`TransitionRecorder.record`.
+        params: Episode parameters; defaults to ``PinballParams()``.
+        policy: ``policy(key, obs) -> action``; defaults to uniform-random over
+            ``env.action_space().n``.
+        max_steps: The episode stops early once the target is reached or this
+            many steps are taken, mirroring ``terminated``/``truncated`` from
+            :meth:`Pinball.step`.
     """
     params = params if params is not None else PinballParams()
     n_actions = env.action_space(params).n
@@ -136,9 +149,12 @@ def record_rollout(
         def body(carry):
             state, key, _done, i = carry
             key, k_policy, k_step = jax.random.split(key, 3)
-            obs = jnp.stack([state.x, state.y, state.xdot, state.ydot]).astype(jnp.float32)
+            obs = jnp.stack([state.x, state.y, state.xdot, state.ydot])
+            obs = obs.astype(jnp.float32)
             action = policy_fn(k_policy, obs)
-            _, next_state, _, terminated, truncated, _ = env.step(k_step, state, action, params)
+            _, next_state, _, terminated, truncated, _ = env.step(
+                k_step, state, action, params
+            )
             recorder.record(next_state, terminated)
             return (next_state, key, terminated | truncated, i + 1)
 
@@ -172,7 +188,12 @@ def _style_axes(ax: Axes) -> None:
 
 def draw_obstacles(ax: Axes, env: Pinball, **kwargs) -> None:
     """Draw ``env``'s obstacles as filled polygons (default: gray)."""
-    style = {"facecolor": OBSTACLE_COLOR, "edgecolor": "black", "linewidth": 0.5, "zorder": 2}
+    style = {
+        "facecolor": OBSTACLE_COLOR,
+        "edgecolor": "black",
+        "linewidth": 0.5,
+        "zorder": 2,
+    }
     style.update(kwargs)
     for pts in _obstacle_polygons(env):
         ax.add_patch(Polygon(pts, closed=True, **style))
@@ -192,27 +213,45 @@ def _ball_radius(env: Pinball) -> float:
 
 
 class BehaviorAnimator:
-    """Draws the static scene once, then updates a ball marker + trail per frame."""
+    """Draws the static scene once, then updates a ball marker + trail per frame.
 
-    def __init__(self, ax: Axes, env: Pinball, trajectory: Trajectory, trail: bool = True) -> None:
+    Args:
+        ax: Axes to draw on; restyled to ``env``'s ``[0, 1]^2`` domain.
+        env: The environment whose obstacles/target to draw.
+        trajectory: The episode to animate.
+        trail: Whether to draw the ball's path so far as a line.
+    """
+
+    def __init__(
+        self, ax: Axes, env: Pinball, trajectory: Trajectory, trail: bool = True
+    ) -> None:
         self.trajectory = trajectory
         draw_obstacles(ax, env)
         draw_target(ax, env)
-        self.trail_line = (
-            ax.plot([], [], color="steelblue", linewidth=1, alpha=0.6, zorder=4)[0] if trail else None
-        )
+        self.trail_line = None
+        if trail:
+            (self.trail_line,) = ax.plot(
+                [], [], color="steelblue", linewidth=1, alpha=0.6, zorder=4
+            )
         self.ball = Circle(
-            (trajectory.x[0], trajectory.y[0]), _ball_radius(env), facecolor=BALL_COLOR, edgecolor="black", zorder=6
+            (trajectory.x[0], trajectory.y[0]),
+            _ball_radius(env),
+            facecolor=BALL_COLOR,
+            edgecolor="black",
+            zorder=6,
         )
         ax.add_patch(self.ball)
         _style_axes(ax)
 
     def update(self, step: int) -> list:
+        """Moves the ball (and its trail) to ``step``; returns changed artists."""
         idx = min(step, len(self.trajectory.x) - 1)
         self.ball.center = (self.trajectory.x[idx], self.trajectory.y[idx])
         artists = [self.ball]
         if self.trail_line is not None:
-            self.trail_line.set_data(self.trajectory.x[: idx + 1], self.trajectory.y[: idx + 1])
+            self.trail_line.set_data(
+                self.trajectory.x[: idx + 1], self.trajectory.y[: idx + 1]
+            )
             artists.append(self.trail_line)
         return artists
 
@@ -229,21 +268,45 @@ def occupancy_histogram(trajectory: Trajectory, bins: int = 40) -> np.ndarray:
 
 
 class HeatmapAnimator:
-    """Draws the static scene once, then updates a cumulative occupancy heatmap per frame."""
+    """Draws the static scene once, then updates the occupancy heatmap per frame.
 
-    def __init__(self, ax: Axes, env: Pinball, trajectory: Trajectory, bins: int = 40, cmap: str = "viridis") -> None:
+    Args:
+        ax: Axes to draw on; restyled to ``env``'s ``[0, 1]^2`` domain.
+        env: The environment whose obstacles/target to draw.
+        trajectory: The episode to animate.
+        bins: Number of histogram bins per axis.
+        cmap: Matplotlib colormap for the heatmap.
+    """
+
+    def __init__(
+        self,
+        ax: Axes,
+        env: Pinball,
+        trajectory: Trajectory,
+        bins: int = 40,
+        cmap: str = "viridis",
+    ) -> None:
         self.trajectory = trajectory
         self.bins = bins
         self.image = ax.imshow(
-            np.zeros((bins, bins)), origin="lower", extent=(0, 1, 0, 1), cmap=cmap, vmin=0, aspect="equal", zorder=0
+            np.zeros((bins, bins)),
+            origin="lower",
+            extent=(0, 1, 0, 1),
+            cmap=cmap,
+            vmin=0,
+            aspect="equal",
+            zorder=0,
         )
         draw_obstacles(ax, env)
         draw_target(ax, env)
         _style_axes(ax)
 
     def update(self, step: int) -> list:
+        """Recomputes the heatmap over steps ``[0, step]``; returns changed artists."""
         idx = min(step, len(self.trajectory.x) - 1)
-        partial = self.trajectory._replace(x=self.trajectory.x[: idx + 1], y=self.trajectory.y[: idx + 1])
+        partial = self.trajectory._replace(
+            x=self.trajectory.x[: idx + 1], y=self.trajectory.y[: idx + 1]
+        )
         counts = occupancy_histogram(partial, bins=self.bins)
         self.image.set_data(counts)
         self.image.set_clim(0, max(counts.max(), 1))
@@ -251,23 +314,65 @@ class HeatmapAnimator:
 
 
 def save_behavior_gif(
-    env: Pinball, trajectory: Trajectory, path: str, fps: int = 15, figsize=(4, 4), dpi: int = 100, trail: bool = True
+    env: Pinball,
+    trajectory: Trajectory,
+    path: str,
+    fps: int = 15,
+    figsize=(4, 4),
+    dpi: int = 100,
+    trail: bool = True,
 ) -> None:
-    """Save an animated GIF of ``trajectory``'s ball moving through ``env``."""
+    """Save an animated GIF of ``trajectory``'s ball moving through ``env``.
+
+    Args:
+        env: The environment whose obstacles/target to draw.
+        trajectory: The episode to animate.
+        path: Output GIF path.
+        fps: Playback frame rate.
+        figsize: Matplotlib figure size, in inches.
+        dpi: Output resolution.
+        trail: Whether to draw the ball's path so far as a line.
+    """
     fig, ax = plt.subplots(figsize=figsize)
     animator = BehaviorAnimator(ax, env, trajectory, trail=trail)
-    anim = FuncAnimation(fig, animator.update, frames=len(trajectory.x), interval=1000 / fps, blit=False)
+    anim = FuncAnimation(
+        fig, animator.update, frames=len(trajectory.x), interval=1000 / fps, blit=False
+    )
     anim.save(str(path), writer=PillowWriter(fps=fps), dpi=dpi)
     plt.close(fig)
 
 
 def save_occupancy_heatmap(
-    env: Pinball, trajectory: Trajectory, path: str, bins: int = 40, cmap: str = "viridis", figsize=(4, 4), dpi: int = 100
+    env: Pinball,
+    trajectory: Trajectory,
+    path: str,
+    bins: int = 40,
+    cmap: str = "viridis",
+    figsize=(4, 4),
+    dpi: int = 100,
 ) -> None:
-    """Save a static occupancy heatmap of ``trajectory`` over ``env``'s obstacle course."""
+    """Save a static occupancy heatmap of ``trajectory`` over ``env``'s obstacle course.
+
+    Args:
+        env: The environment whose obstacles/target to draw.
+        trajectory: The episode to summarize.
+        path: Output image path.
+        bins: Number of histogram bins per axis.
+        cmap: Matplotlib colormap for the heatmap.
+        figsize: Matplotlib figure size, in inches.
+        dpi: Output resolution.
+    """
     fig, ax = plt.subplots(figsize=figsize)
     counts = occupancy_histogram(trajectory, bins=bins)
-    ax.imshow(counts, origin="lower", extent=(0, 1, 0, 1), cmap=cmap, vmin=0, aspect="equal", zorder=0)
+    ax.imshow(
+        counts,
+        origin="lower",
+        extent=(0, 1, 0, 1),
+        cmap=cmap,
+        vmin=0,
+        aspect="equal",
+        zorder=0,
+    )
     draw_obstacles(ax, env)
     draw_target(ax, env)
     _style_axes(ax)
@@ -285,9 +390,22 @@ def save_occupancy_heatmap_gif(
     figsize=(4, 4),
     dpi: int = 100,
 ) -> None:
-    """Save an animated GIF of ``trajectory``'s occupancy heatmap accumulating over time."""
+    """Save an animated GIF of ``trajectory``'s occupancy heatmap as it accumulates.
+
+    Args:
+        env: The environment whose obstacles/target to draw.
+        trajectory: The episode to animate.
+        path: Output GIF path.
+        bins: Number of histogram bins per axis.
+        fps: Playback frame rate.
+        cmap: Matplotlib colormap for the heatmap.
+        figsize: Matplotlib figure size, in inches.
+        dpi: Output resolution.
+    """
     fig, ax = plt.subplots(figsize=figsize)
     animator = HeatmapAnimator(ax, env, trajectory, bins=bins, cmap=cmap)
-    anim = FuncAnimation(fig, animator.update, frames=len(trajectory.x), interval=1000 / fps, blit=False)
+    anim = FuncAnimation(
+        fig, animator.update, frames=len(trajectory.x), interval=1000 / fps, blit=False
+    )
     anim.save(str(path), writer=PillowWriter(fps=fps), dpi=dpi)
     plt.close(fig)

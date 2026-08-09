@@ -14,6 +14,7 @@ NUM_STEPS = 20
 
 
 def main() -> None:
+    """Rolls out a random policy for `NUM_STEPS` and prints each step's transition."""
     env = Pinball("box")  # bundled config name, or a path to a .cfg file
     params = PinballParams(max_steps_in_episode=100)
 
@@ -28,13 +29,16 @@ def main() -> None:
         def step(carry, action):
             key, state = carry
             key, subkey = jax.random.split(key)
-            obs, state, reward, terminated, truncated, _ = env.step(subkey, state, action, params)
+            obs, state, reward, terminated, truncated, _ = env.step(
+                subkey, state, action, params
+            )
             return (key, state), (obs, reward, terminated, truncated)
 
         (_, final_state), traj = jax.lax.scan(step, (key, state), actions)
         return final_state, traj
 
-    final_state, (obs_seq, rewards, terminated, truncated) = rollout(rollout_key, state, actions)
+    final_state, traj = rollout(rollout_key, state, actions)
+    obs_seq, rewards, terminated, truncated = traj
 
     print(f"start obs: {obs}")
     for t in range(NUM_STEPS):
