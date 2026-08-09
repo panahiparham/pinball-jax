@@ -170,6 +170,12 @@ episode: ball behavior on top, the resulting state-occupancy heatmap
 
 ![Random-policy behavior and state occupancy across all five Pinball variants](pinball_variants.gif)
 
+Regenerate with:
+
+```sh
+uv run --group viz python make_variants_gif.py
+```
+
 ## Benchmarks
 `medium`, `hard` (see [`src/pinball_jax/configs/`](src/pinball_jax/configs/)).
 They share the same physics and differ only in their obstacles, start, and
