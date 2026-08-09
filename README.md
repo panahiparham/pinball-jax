@@ -127,9 +127,6 @@ agent on Pinball `easy` for 100k timesteps across 30 seeds (each agent is a
 single `jax.vmap` over seeds), then plots mean episodic return over time with
 95% bootstrap confidence bands, alongside one seed's state-occupancy heatmap
 over its entire training lifetime for each agent.
-single `jax.vmap` over seeds), then plots mean episodic return over time with
-95% bootstrap confidence bands, alongside one seed's state-occupancy heatmap
-over its entire training lifetime for each agent.
 
 ![DQN vs. random agent on Pinball easy: learning curves and lifetime state occupancy](benchmark_dqn.png)
 
