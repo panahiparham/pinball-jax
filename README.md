@@ -145,3 +145,42 @@ Default DQN hyperparameters for Pinball `easy`:
 | Discount (`gamma`)    | 0.99         |
 | Epsilon (constant)    | 0.1          |
 | Hidden layers         | 2 × 32 (ReLU) |
+
+## Throughput
+
+These measure environment steps per second on CPU. Compilation time is excluded.
+The numbers below were measured on an Apple M1 CPU with 8 cores.
+
+Run with:
+
+```sh
+uv run --group benchmark python benchmark_throughput.py
+```
+
+**Environment throughput, random policy**
+
+The vmapped rows count total steps across all environments. Step count per
+config is chosen to bound wall-clock time (steps/sec is a rate, independent of
+step count once compiled): collision detection against several polygon
+obstacles doesn't vectorize as cheaply across a wide vmap batch as e.g. a
+simple grid update, so larger environment counts use fewer steps.
+
+| Implementation | Environments | Steps/sec | Speedup vs. numpy |
+| --- | --- | --- | --- |
+| reference (numpy) | 1 | 6,224 | 1x |
+| pinball-jax | 1 | 34,400 | 5.5x |
+| pinball-jax | 8 | 75,100 | 12x |
+| pinball-jax | 64 | 45,000 | 7.2x |
+| pinball-jax | 512 | 53,300 | 8.6x |
+| pinball-jax | 4096 | 103,000 | 17x |
+
+**Agent throughput on pinball-jax**
+
+Measured at one seed, so each row is a single agent stepping its own environment
+with its own replay buffer. Multi-seed runs scale by vmapping over independent
+streams like these rather than by batching environments under one agent.
+
+| Agent | Steps/sec |
+| --- | --- |
+| Random | 32,900 |
+| DQN | 18,100 |
