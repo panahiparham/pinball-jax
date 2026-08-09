@@ -114,6 +114,12 @@ episode: ball behavior on top, the resulting state-occupancy heatmap
 
 ![Random-policy behavior and state occupancy across all five Pinball variants](pinball_variants.gif)
 
+Regenerate with:
+
+```sh
+uv run --group viz python make_variants_gif.py
+```
+
 ## Benchmarks
 
 [`benchmark_dqn.py`](benchmark_dqn.py) trains a small DQN and a uniform-random
