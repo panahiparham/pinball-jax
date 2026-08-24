@@ -173,3 +173,43 @@ def test_next_step_pending_clears_after_dead_step(key: jax.Array) -> None:
     assert not bool(terminated)
     assert not bool(truncated)
     assert not bool(state.pending)
+
+
+def test_next_step_mode_jit(key: jax.Array) -> None:
+    """A jitted step works in NEXT_STEP mode across a truncation boundary."""
+    env = Pinball("box")
+    wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
+    params = PinballParams(max_steps_in_episode=2)
+    jstep = jax.jit(lambda s, a: wrapped.step(key, s, a, params))
+
+    _, state = wrapped.reset(key)
+    for _ in range(3):  # crosses the truncation boundary (max_steps=2)
+        obs, state, reward, terminated, truncated, _ = jstep(state, jnp.int32(0))
+
+    assert obs.shape == (4,)
+    # boundary step, then the dead step, then one normal new-episode step.
+    assert not bool(state.pending)
+
+
+def test_next_step_mode_vmap(key: jax.Array) -> None:
+    """vmap over a batch of seeds keeps the per-element autoreset contract."""
+    env = Pinball("box")
+    wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
+    params = PinballParams(max_steps_in_episode=2)
+
+    keys = jax.random.split(key, 8)
+    obs, state = jax.vmap(wrapped.reset)(keys)
+    assert obs.shape == (8, 4)
+    assert state.pending.shape == (8,)
+
+    vstep = jax.vmap(lambda s, a: wrapped.step(key, s, a, params))
+    actions = jnp.arange(8) % NUM_ACTIONS
+    for _ in range(3):  # crosses the truncation boundary for every batch element
+        obs, state, reward, terminated, truncated, _ = vstep(state, actions)
+
+    assert obs.shape == (8, 4)
+    assert reward.shape == (8,)
+    assert terminated.shape == (8,)
+    assert truncated.shape == (8,)
+    assert state.pending.shape == (8,)
+    assert bool(jnp.all(~state.pending))
