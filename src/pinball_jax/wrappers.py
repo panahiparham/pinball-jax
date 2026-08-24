@@ -98,6 +98,20 @@ class AutoresetWrapper[ActionSpaceT]:
             next_state = AutoresetState(inner=inner, pending=jnp.asarray(False))
             return obs, next_state, reward, terminated, truncated, info
 
-        raise NotImplementedError(
-            f"AutoresetMode.{self.mode.name} is not yet implemented"
+        reset_key, step_key = jax.random.split(key)
+        obs_reset, inner_reset = self.env.reset(reset_key, params)
+        obs_step, inner_step, reward, terminated, truncated, info = self.env.step(
+            step_key, state.inner, action, params
         )
+
+        pending = state.pending
+        obs = jnp.where(pending, obs_reset, obs_step)
+        inner = jax.tree.map(
+            lambda a, b: jnp.where(pending, a, b), inner_reset, inner_step
+        )
+        terminated = terminated & ~pending
+        truncated = truncated & ~pending
+        reward = jnp.where(pending, jnp.zeros_like(reward), reward)
+
+        next_state = AutoresetState(inner=inner, pending=terminated | truncated)
+        return obs, next_state, reward, terminated, truncated, info
