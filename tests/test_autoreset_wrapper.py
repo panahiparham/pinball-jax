@@ -150,3 +150,26 @@ def test_next_step_dead_step_obs_is_a_real_start_point(key: jax.Array) -> None:
     assert jnp.all(obs[2:] == 0.0)  # at rest, like any fresh reset
     matches_a_start = jnp.any(jnp.all(jnp.isclose(env.start_pts, obs[:2]), axis=-1))
     assert bool(matches_a_start)
+
+
+def test_next_step_pending_clears_after_dead_step(key: jax.Array) -> None:
+    """The step after the dead step behaves like a normal new-episode step."""
+    env = Pinball("box")
+    wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
+    params = PinballParams(max_steps_in_episode=2)
+
+    _, state = wrapped.reset(key)
+    for _ in range(2):
+        _, state, _, _, truncated, _ = wrapped.step(key, state, NUM_ACTIONS - 1, params)
+    assert bool(truncated)
+
+    _, state, _, _, _, _ = wrapped.step(key, state, 0, params)
+    assert not bool(state.pending)
+
+    obs, state, reward, terminated, truncated, _ = wrapped.step(key, state, 0, params)
+
+    assert state.inner.timestep == 1
+    assert reward == -1.0
+    assert not bool(terminated)
+    assert not bool(truncated)
+    assert not bool(state.pending)
