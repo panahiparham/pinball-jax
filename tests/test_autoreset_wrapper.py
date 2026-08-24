@@ -103,3 +103,32 @@ def test_next_step_termination_then_dead_step_ignores_action(key: jax.Array) -> 
         assert not bool(term2)
         assert not bool(trunc2)
         assert not bool(state2.pending)
+
+
+def test_next_step_truncation_then_dead_step_ignores_action(key: jax.Array) -> None:
+    """Truncating step keeps the true final obs; the next ignores its action."""
+    env = Pinball("box")
+    max_steps = 3
+    params = PinballParams(max_steps_in_episode=max_steps)
+
+    for dead_action in range(2):  # prove the dead step's action is irrelevant
+        wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
+        _, state = wrapped.reset(key)
+
+        terminated = truncated = False
+        for _ in range(max_steps):
+            _, state, _, terminated, truncated, _ = wrapped.step(
+                key, state, NUM_ACTIONS - 1, params
+            )
+
+        assert bool(truncated)
+        assert not bool(terminated)
+        assert bool(state.pending)
+
+        _, state2, reward2, term2, trunc2, _ = wrapped.step(
+            key, state, dead_action, params
+        )
+        assert reward2 == 0.0
+        assert not bool(term2)
+        assert not bool(trunc2)
+        assert not bool(state2.pending)
