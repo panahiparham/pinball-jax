@@ -49,6 +49,32 @@ obs, state, reward, terminated, truncated, info = env.step(key, state, 0, params
 
 See [`example.py`](example.py) for a jitted `lax.scan` rollout.
 
+### Autoreset
+
+`Pinball.step`/`reset` use manual reset by default: on the step that ends an
+episode the caller sees the true boundary observation and must call `reset`
+before stepping again. `AutoresetWrapper` adds an opt-in `NEXT_STEP` scheme
+where the environment resets itself:
+
+```python
+import jax
+from pinball_jax import AutoresetMode, AutoresetWrapper, Pinball, PinballParams
+
+env = AutoresetWrapper(Pinball("box"), mode=AutoresetMode.NEXT_STEP)
+params = PinballParams(max_steps_in_episode=100)
+
+key = jax.random.PRNGKey(0)
+obs, state = env.reset(key)
+obs, state, reward, terminated, truncated, info = env.step(key, state, 0, params)
+```
+
+On the step that ends an episode, the returned observation is still the true
+final one. The step after that ignores its action and returns the next
+episode's initial observation, with `reward=0` and both flags `False` -
+matching Gymnasium 1.0's vector envs, EnvPool, and ale-py.
+`AutoresetMode.DISABLED` (the default) passes the wrapped environment
+through unchanged.
+
 ### Visualizing behavior
 
 [`pinball_jax.visualization`](src/pinball_jax/visualization.py) records and
