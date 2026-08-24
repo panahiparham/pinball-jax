@@ -132,3 +132,21 @@ def test_next_step_truncation_then_dead_step_ignores_action(key: jax.Array) -> N
         assert not bool(term2)
         assert not bool(trunc2)
         assert not bool(state2.pending)
+
+
+def test_next_step_dead_step_obs_is_a_real_start_point(key: jax.Array) -> None:
+    """The dead step's observation matches one of the config's start points."""
+    env = Pinball("box")
+    wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
+    params = PinballParams(max_steps_in_episode=2)
+
+    _, state = wrapped.reset(key)
+    for _ in range(2):
+        _, state, _, _, truncated, _ = wrapped.step(key, state, NUM_ACTIONS - 1, params)
+    assert bool(truncated)
+
+    obs, state, reward, terminated, truncated, _ = wrapped.step(key, state, 0, params)
+
+    assert jnp.all(obs[2:] == 0.0)  # at rest, like any fresh reset
+    matches_a_start = jnp.any(jnp.all(jnp.isclose(env.start_pts, obs[:2]), axis=-1))
+    assert bool(matches_a_start)
