@@ -17,6 +17,9 @@ import enum
 from typing import Any, NamedTuple
 
 import jax
+import jax.numpy as jnp
+
+from pinball_jax.gym_env import GymEnv, ObservationSpace
 
 
 class AutoresetMode(enum.Enum):
@@ -36,3 +39,39 @@ class AutoresetState(NamedTuple):
 
     inner: Any
     pending: jax.Array
+
+
+class AutoresetWrapper[ActionSpaceT]:
+    """Adds autoreset semantics to a `GymEnv`-conforming environment.
+
+    Args:
+        env: The environment to wrap. Its own `step`/`reset` are left
+            unmodified; this wrapper only manages the pending-reset flag.
+        mode: `AutoresetMode.DISABLED` (default) passes `env` through
+            unchanged. `AutoresetMode.NEXT_STEP` adds a "dead" step per
+            episode: the step after termination/truncation ignores its
+            action and returns the next episode's initial observation.
+    """
+
+    def __init__(
+        self,
+        env: GymEnv[ActionSpaceT],
+        mode: AutoresetMode = AutoresetMode.DISABLED,
+    ) -> None:
+        self.env = env
+        self.mode = mode
+
+    def observation_space(self, params: object | None = None) -> ObservationSpace:
+        """Returns the space describing valid observations."""
+        return self.env.observation_space(params)
+
+    def action_space(self, params: object | None = None) -> ActionSpaceT:
+        """Returns the space describing valid actions."""
+        return self.env.action_space(params)
+
+    def reset(
+        self, key: jax.Array, params: object | None = None
+    ) -> tuple[jax.Array, AutoresetState]:
+        """Returns the initial `(observation, state)` for a new episode."""
+        obs, inner = self.env.reset(key, params)
+        return obs, AutoresetState(inner=inner, pending=jnp.asarray(False))
