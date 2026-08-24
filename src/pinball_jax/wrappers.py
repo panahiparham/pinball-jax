@@ -75,3 +75,29 @@ class AutoresetWrapper[ActionSpaceT]:
         """Returns the initial `(observation, state)` for a new episode."""
         obs, inner = self.env.reset(key, params)
         return obs, AutoresetState(inner=inner, pending=jnp.asarray(False))
+
+    def step(
+        self,
+        key: jax.Array,
+        state: AutoresetState,
+        action: jax.Array,
+        params: object | None = None,
+    ) -> tuple[
+        jax.Array, AutoresetState, jax.Array, jax.Array, jax.Array, dict[str, jax.Array]
+    ]:
+        """Returns `(observation, state, reward, terminated, truncated, info)`.
+
+        In `AutoresetMode.NEXT_STEP`, a step taken when `state.pending` is
+        `True` ignores `action`, resets the wrapped environment, and returns
+        its initial observation with `reward=0` and both flags `False`.
+        """
+        if self.mode is AutoresetMode.DISABLED:
+            obs, inner, reward, terminated, truncated, info = self.env.step(
+                key, state.inner, action, params
+            )
+            next_state = AutoresetState(inner=inner, pending=jnp.asarray(False))
+            return obs, next_state, reward, terminated, truncated, info
+
+        raise NotImplementedError(
+            f"AutoresetMode.{self.mode.name} is not yet implemented"
+        )
