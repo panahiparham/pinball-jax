@@ -70,3 +70,36 @@ def test_disabled_mode_truncates_like_wrapped_env(key: jax.Array) -> None:
 
     assert bool(truncated)
     assert not bool(state.pending)
+
+
+def test_next_step_termination_then_dead_step_ignores_action(key: jax.Array) -> None:
+    """Terminal step reports the true final obs; the next ignores its action."""
+    env = Pinball("empty")
+    params = PinballParams(max_steps_in_episode=10**9)
+
+    for dead_action in range(2):  # prove the dead step's action is irrelevant
+        wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
+        jstep = jax.jit(lambda s, a: wrapped.step(key, s, a, params))
+        obs, state = wrapped.reset(key)
+        target = jnp.asarray(env.target)
+
+        terminated = False
+        for _ in range(2000):
+            action = 0 if float(state.inner.x) < target[0] else 3
+            obs, state, reward, terminated, truncated, _ = jstep(state, action)
+            if bool(terminated):
+                break
+
+        assert bool(terminated)
+        # The terminal step reports the true boundary observation.
+        dist = jnp.linalg.norm(obs[:2] - target)
+        assert dist < env.target_rad
+        assert bool(state.pending)
+
+        obs2, state2, reward2, term2, trunc2, _ = wrapped.step(
+            key, state, dead_action, params
+        )
+        assert reward2 == 0.0
+        assert not bool(term2)
+        assert not bool(trunc2)
+        assert not bool(state2.pending)
