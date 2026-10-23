@@ -22,6 +22,7 @@ dev = [
     "pytest",
     "numpy",
     "ruff>=0.17.2",
+    "pyrefly>=1.4.0",
 ]
 # For benchmark_dqn.py: uv run --group benchmark python benchmark_dqn.py
 benchmark = ["optax", "matplotlib", "numpy"]
@@ -31,3 +32,6 @@ viz = ["matplotlib", "numpy"]
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+
+[tool.pyrefly]
+project-includes = ["src"]
