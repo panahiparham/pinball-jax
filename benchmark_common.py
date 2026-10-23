@@ -102,7 +102,7 @@ def random_train(rng, env, env_params, action_dim, total_timesteps):
     obs, state = env.reset(k, env_params)
 
     def step(carry, _):
-        state, obs, rng = carry
+        state, _obs, rng = carry
         rng, k_a, k_step, k_reset = jax.random.split(rng, 4)
         action = jax.random.randint(k_a, (), 0, action_dim, dtype=jnp.int32)
         next_obs, next_state, reward, term, trunc, _ = env.step(

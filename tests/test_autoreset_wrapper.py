@@ -88,7 +88,7 @@ def test_next_step_termination_then_dead_step_ignores_action(key: jax.Array) -> 
         terminated = False
         for _ in range(2000):
             action = 0 if float(state.inner.x) < target[0] else 3
-            obs, state, reward, terminated, truncated, _ = jstep(state, action)
+            obs, state, _reward, terminated, _truncated, _ = jstep(state, action)
             if bool(terminated):
                 break
 
@@ -98,7 +98,7 @@ def test_next_step_termination_then_dead_step_ignores_action(key: jax.Array) -> 
         assert dist < env.target_rad
         assert bool(state.pending)
 
-        obs2, state2, reward2, term2, trunc2, _ = wrapped.step(
+        _obs2, state2, reward2, term2, trunc2, _ = wrapped.step(
             key, state, dead_action, params
         )
         assert reward2 == 0.0
@@ -147,7 +147,7 @@ def test_next_step_dead_step_obs_is_a_real_start_point(key: jax.Array) -> None:
         _, state, _, _, truncated, _ = wrapped.step(key, state, NUM_ACTIONS - 1, params)
     assert bool(truncated)
 
-    obs, state, reward, terminated, truncated, _ = wrapped.step(key, state, 0, params)
+    obs, state, _reward, _terminated, truncated, _ = wrapped.step(key, state, 0, params)
 
     assert jnp.all(obs[2:] == 0.0)  # at rest, like any fresh reset
     matches_a_start = jnp.any(jnp.all(jnp.isclose(env.start_pts, obs[:2]), axis=-1))
@@ -168,7 +168,7 @@ def test_next_step_pending_clears_after_dead_step(key: jax.Array) -> None:
     _, state, _, _, _, _ = wrapped.step(key, state, 0, params)
     assert not bool(state.pending)
 
-    obs, state, reward, terminated, truncated, _ = wrapped.step(key, state, 0, params)
+    _obs, state, reward, terminated, truncated, _ = wrapped.step(key, state, 0, params)
 
     assert state.inner.timestep == 1
     assert reward == -1.0
@@ -186,7 +186,7 @@ def test_next_step_mode_jit(key: jax.Array) -> None:
 
     _, state = wrapped.reset(key)
     for _ in range(3):  # crosses the truncation boundary (max_steps=2)
-        obs, state, reward, terminated, truncated, _ = jstep(state, jnp.int32(0))
+        obs, state, _reward, _terminated, _truncated, _ = jstep(state, jnp.int32(0))
 
     assert obs.shape == (4,)
     # boundary step, then the dead step, then one normal new-episode step.
