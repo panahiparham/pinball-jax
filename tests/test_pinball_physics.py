@@ -8,11 +8,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from _reference_pinball import PinballModel
 
 import pinball_jax
 from pinball_jax.pinball import Pinball, PinballParams
-
-from _reference_pinball import PinballModel
 
 CONFIGS = ["empty", "box", "easy", "medium", "hard"]
 CONFIG_DIR = Path(pinball_jax.__file__).parent / "configs"
