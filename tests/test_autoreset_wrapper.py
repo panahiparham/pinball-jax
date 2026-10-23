@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import pytest
@@ -79,7 +81,7 @@ def test_next_step_termination_then_dead_step_ignores_action(key: jax.Array) -> 
 
     for dead_action in range(2):  # prove the dead step's action is irrelevant
         wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
-        jstep = jax.jit(lambda s, a: wrapped.step(key, s, a, params))
+        jstep = jax.jit(partial(wrapped.step, key, params=params))
         obs, state = wrapped.reset(key)
         target = jnp.asarray(env.target)
 
@@ -180,7 +182,7 @@ def test_next_step_mode_jit(key: jax.Array) -> None:
     env = Pinball("box")
     wrapped = AutoresetWrapper(env, mode=AutoresetMode.NEXT_STEP)
     params = PinballParams(max_steps_in_episode=2)
-    jstep = jax.jit(lambda s, a: wrapped.step(key, s, a, params))
+    jstep = jax.jit(partial(wrapped.step, key, params=params))
 
     _, state = wrapped.reset(key)
     for _ in range(3):  # crosses the truncation boundary (max_steps=2)
