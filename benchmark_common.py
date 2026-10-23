@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from typing import NamedTuple
 
 import jax
@@ -28,7 +29,7 @@ optimizer = optax.adam(LR)
 def init_mlp(key, sizes):
     """Initialize a plain MLP: list of (W, b) tuples with He initialization."""
     params = []
-    for fan_in, fan_out in zip(sizes[:-1], sizes[1:]):
+    for fan_in, fan_out in itertools.pairwise(sizes):
         key, k = jax.random.split(key)
         w = jax.random.normal(k, (fan_in, fan_out)) * jnp.sqrt(2.0 / fan_in)
         params.append((w, jnp.zeros(fan_out)))
