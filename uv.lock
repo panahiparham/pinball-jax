@@ -460,6 +460,7 @@ benchmark = [
     { name = "optax" },
 ]
 dev = [
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "pyrefly" },
     { name = "pytest" },
@@ -480,6 +481,7 @@ benchmark = [
     { name = "optax" },
 ]
 dev = [
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "pyrefly", specifier = ">=1.4.0" },
     { name = "pytest" },

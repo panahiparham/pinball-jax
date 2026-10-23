@@ -21,6 +21,7 @@ artifacts = ["*.cfg"]
 dev = [
     "pytest",
     "numpy",
+    "matplotlib",
     "ruff>=0.17.2",
     "pyrefly>=1.4.0",
 ]
