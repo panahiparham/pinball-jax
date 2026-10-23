@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from typing import NamedTuple
 
 import jax
@@ -28,7 +29,7 @@ optimizer = optax.adam(LR)
 def init_mlp(key, sizes):
     """Initialize a plain MLP: list of (W, b) tuples with He initialization."""
     params = []
-    for fan_in, fan_out in zip(sizes[:-1], sizes[1:]):
+    for fan_in, fan_out in itertools.pairwise(sizes):
         key, k = jax.random.split(key)
         w = jax.random.normal(k, (fan_in, fan_out)) * jnp.sqrt(2.0 / fan_in)
         params.append((w, jnp.zeros(fan_out)))
@@ -102,7 +103,7 @@ def random_train(rng, env, env_params, action_dim, total_timesteps):
     obs, state = env.reset(k, env_params)
 
     def step(carry, _):
-        state, obs, rng = carry
+        state, _obs, rng = carry
         rng, k_a, k_step, k_reset = jax.random.split(rng, 4)
         action = jax.random.randint(k_a, (), 0, action_dim, dtype=jnp.int32)
         next_obs, next_state, reward, term, trunc, _ = env.step(

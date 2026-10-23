@@ -18,8 +18,22 @@ packages = ["src/pinball_jax"]
 artifacts = ["*.cfg"]
 
 [dependency-groups]
-dev = ["pytest", "numpy"]
+dev = [
+    "pytest",
+    "numpy",
+    "matplotlib",
+    "ruff>=0.17.2",
+    "pyrefly>=1.4.0",
+]
 # For benchmark_dqn.py: uv run --group benchmark python benchmark_dqn.py
 benchmark = ["optax", "matplotlib", "numpy"]
 # For pinball_jax.visualization: uv run --group viz python your_script.py
 viz = ["matplotlib", "numpy"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = ["tests/_reference_pinball.py"]
+
+[tool.pyrefly]
+project-includes = ["src"]

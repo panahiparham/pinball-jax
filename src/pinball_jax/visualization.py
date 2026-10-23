@@ -27,13 +27,15 @@ whatever titles they want.
 
 from __future__ import annotations
 
-from typing import Callable, NamedTuple
+from collections.abc import Callable
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.patches import Circle, Polygon
 
@@ -247,7 +249,7 @@ class BehaviorAnimator:
         """Moves the ball (and its trail) to ``step``; returns changed artists."""
         idx = min(step, len(self.trajectory.x) - 1)
         self.ball.center = (self.trajectory.x[idx], self.trajectory.y[idx])
-        artists = [self.ball]
+        artists: list[Artist] = [self.ball]
         if self.trail_line is not None:
             self.trail_line.set_data(
                 self.trajectory.x[: idx + 1], self.trajectory.y[: idx + 1]

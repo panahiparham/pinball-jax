@@ -8,11 +8,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from _reference_pinball import PinballModel
 
 import pinball_jax
 from pinball_jax.pinball import Pinball, PinballParams
-
-from _reference_pinball import PinballModel
 
 CONFIGS = ["empty", "box", "easy", "medium", "hard"]
 CONFIG_DIR = Path(pinball_jax.__file__).parent / "configs"
@@ -133,7 +132,7 @@ def test_jit_step_runs(key: jax.Array) -> None:
     env = Pinball("box")
     _, state = env.reset(key)
     jstep = jax.jit(lambda s, a: env.step(key, s, a, NO_LIMIT))
-    obs, next_state, reward, terminated, truncated, _ = jstep(state, jnp.int32(0))
+    obs, next_state, _reward, _terminated, _truncated, _ = jstep(state, jnp.int32(0))
     assert obs.shape == (4,)
     assert next_state.timestep == 1
 
@@ -146,7 +145,7 @@ def test_vmap_over_batch(key: jax.Array) -> None:
 
     actions = jnp.arange(8) % 5
     step = jax.vmap(lambda s, a: env.step(key, s, a, NO_LIMIT))
-    obs2, states2, reward, terminated, truncated, _ = step(states, actions)
+    obs2, states2, reward, terminated, _truncated, _ = step(states, actions)
     assert obs2.shape == (8, 4)
     assert reward.shape == (8,)
     assert terminated.shape == (8,)

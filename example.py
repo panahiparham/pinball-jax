@@ -37,7 +37,7 @@ def main() -> None:
         (_, final_state), traj = jax.lax.scan(step, (key, state), actions)
         return final_state, traj
 
-    final_state, traj = rollout(rollout_key, state, actions)
+    _final_state, traj = rollout(rollout_key, state, actions)
     obs_seq, rewards, terminated, truncated = traj
 
     print(f"start obs: {obs}")
